@@ -26,6 +26,7 @@ void read_chunk(std::istream &from, std::string const &magic, std::vector< T > *
 	if (!from.read(reinterpret_cast< char * >(&header), sizeof(header))) {
 		throw std::runtime_error("Failed to read chunk header");
 	}
+	printf("magic number: %s, expected: %s\n", std::string(header.magic,4).c_str(), magic.c_str());
 	if (std::string(header.magic,4) != magic) {
 		throw std::runtime_error("Unexpected magic number in chunk");
 	}

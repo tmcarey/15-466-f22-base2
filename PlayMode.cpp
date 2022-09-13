@@ -12,23 +12,29 @@
 
 #include <random>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+GLuint tower_meshes_for_lit_color_texture_program = 0;
+GLuint disk_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > tower_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("tower.pnct"));
+	tower_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	return ret;
+});
+Load< MeshBuffer > disk_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("disk.pnct"));
+	disk_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
+Load< Scene > tower_scene(LoadTagDefault, []() -> Scene const * {
+	return new Scene(data_path("tower.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+		Mesh const &mesh = tower_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
 		drawable.pipeline = lit_color_texture_program_pipeline;
 
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = tower_meshes_for_lit_color_texture_program;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -36,20 +42,41 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
+PlayMode::PlayMode() : scene(*tower_scene) {
 	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
+		if (transform.name == "Tower") tower = &transform;
+		if (transform.name == "Pointer") pointer = &transform;
 	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+	pointer->scale = glm::vec3(0.1f, 0.1f, 0.1f);
 
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
+
+	Mesh const &disk_mesh = disk_meshes->lookup("Disk");
+	Mesh const &disk_outline_mesh = disk_meshes->lookup("DiskOutline");
+	for (int i = 0; i < 1; i++){
+		Scene::Transform *t = new Scene::Transform();
+		t->parent = tower;
+		t->position = glm::vec3(0, 0.0f, 1.0f + i);
+		scene.drawables.emplace_back(t);
+		Scene::Drawable &drawable = scene.drawables.back();
+		drawable.pipeline = lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = disk_meshes_for_lit_color_texture_program;
+		drawable.pipeline.type = disk_mesh.type;
+		drawable.pipeline.start = disk_mesh.start;
+		drawable.pipeline.count = disk_mesh.count;
+
+		Scene::Transform *outline_t = new Scene::Transform();
+		outline_t->parent = t;
+		scene.drawables.emplace_back(outline_t);
+		Scene::Drawable &drawableOutline = scene.drawables.back();
+		drawableOutline.pipeline = lit_color_texture_program_pipeline;
+		drawableOutline.pipeline.vao = disk_meshes_for_lit_color_texture_program;
+		drawableOutline.pipeline.type = disk_outline_mesh.type;
+		drawableOutline.pipeline.start = disk_outline_mesh.start;
+		drawableOutline.pipeline.count = disk_outline_mesh.count;
+
+		disks.push_back(Disk(t, outline_t, BoxCollider(glm::vec3(1.0f, 1.0f, 0.5f), t), 0, 0));
+	}
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -101,16 +128,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			return true;
 		}
+		if(heldDisk == nullptr && targetedDisk != nullptr){
+			heldDisk = targetedDisk;
+			targetedDisk->diskOutline->enabled = false;
+			heldDisk->disk->parent = nullptr;
+		}else if(heldDisk != nullptr){
+			heldDisk = nullptr;
+		}
 	} else if (evt.type == SDL_MOUSEMOTION) {
 		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
+			mousePosition = glm::vec2(
+				evt.motion.x / float(window_size.y),
+				-evt.motion.y / float(window_size.y)
 			);
 			return true;
 		}
@@ -125,40 +154,46 @@ void PlayMode::update(float elapsed) {
 	wobble += elapsed / 10.0f;
 	wobble -= std::floor(wobble);
 
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
+	glm::vec3 mousePoint00(-7.0, -20.0f, 8.0f);
+	glm::vec3 horizMouse(7.8f, 0, 0);
+	glm::vec3 vertMouse(0, 0.0f, 7.0f);
 
-	//move camera:
-	{
+	pointer->position = mousePoint00 + horizMouse * mousePosition.x + vertMouse * mousePosition.y; 
 
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
+	glm::vec3 origin = camera->transform->position;
+	glm::vec3 toPointer = pointer->position - origin;
+	glm::vec3 dir(toPointer.x / toPointer.length(), 
+			toPointer.y / toPointer.length(),
+			toPointer.z / toPointer.length());
 
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
+	if(heldDisk == nullptr){
+		float minT = 100000.f;
+		Disk *targeted = nullptr;
+		for(auto it = disks.begin(); it < disks.end(); it++){
+			float t = 0;
+			if(it->collider.RayBoxIntersect(origin, toPointer, &t)){
+				if(t < minT){
+					minT = t;
+					it->diskOutline->enabled = true;
+					if(targeted){
+						targeted->diskOutline->enabled = false;
+					}
+					targeted = &(*it);
+				}
+			}else{
+				it->diskOutline->enabled = false;
+			}
+		}
+		targetedDisk = targeted;
+	}else{
+		if(dir.y == 0){
+			dir.y = 0.000001f;
+		}
+		heldDisk->disk->position = origin + (dir * (origin.y / -dir.y));
 	}
+
+
+
 
 	//reset button press counters:
 	left.downs = 0;

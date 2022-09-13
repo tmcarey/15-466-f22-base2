@@ -4,6 +4,8 @@
 
 #include <glm/glm.hpp>
 
+#include "Disk.hpp"
+
 #include <vector>
 #include <deque>
 
@@ -28,15 +30,19 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
+	Scene::Transform *tower = nullptr;
+	Scene::Transform *pointer = nullptr;
+	/* Scene::Transform *upper_leg = nullptr; */
+	/* Scene::Transform *lower_leg = nullptr; */
+	/* glm::quat hip_base_rotation; */
+	/* glm::quat upper_leg_base_rotation; */
+	/* glm::quat lower_leg_base_rotation; */
 	float wobble = 0.0f;
+	std::vector<Disk> disks;
+	glm::vec2 mousePosition;
+	Disk *heldDisk = nullptr;
+	Disk *targetedDisk = nullptr;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;
-
 };

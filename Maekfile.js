@@ -119,6 +119,8 @@ const common_names = [
 	maek.CPP('gl_compile_program.cpp'),
 	maek.CPP('Mode.cpp'),
 	maek.CPP('GL.cpp'),
+	maek.CPP('BoxCollider.cpp'),
+	maek.CPP('Disk.cpp'),
 	maek.CPP('Load.cpp')
 ];
 
