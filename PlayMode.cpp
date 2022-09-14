@@ -26,37 +26,34 @@ Load< MeshBuffer > disk_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 });
 
 Load< Scene > tower_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("tower.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = tower_meshes->lookup(mesh_name);
-
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-
-		drawable.pipeline = lit_color_texture_program_pipeline;
-
-		drawable.pipeline.vao = tower_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-
-	});
+	return new Scene();
 });
 
 PlayMode::PlayMode() : scene(*tower_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Tower") tower = &transform;
-		if (transform.name == "Pointer") pointer = &transform;
-	}
+	Mesh const &tower_mesh = tower_meshes->lookup("Tower");
 	pointer->scale = glm::vec3(0.1f, 0.1f, 0.1f);
+	for (int i = 0; i < 3; i++){
+		Scene::Transform *t = new Scene::Transform();
+		t->parent = nullptr;
+		t->position = glm::vec3(-3.0f + (3.0f * i), 0.0f, 0.0f);
+		t->scale = glm::vec3(1.0f + (0.1f * i));
+		scene.drawables.emplace_back(t);
+		Scene::Drawable &drawable = scene.drawables.back();
+		drawable.pipeline = lit_color_texture_program_pipeline;
+		drawable.pipeline.vao = tower_meshes_for_lit_color_texture_program;
+		drawable.pipeline.type = tower_mesh.type;
+		drawable.pipeline.start = tower_mesh.start;
+		drawable.pipeline.count = tower_mesh.count;
+	}
 
 
 	Mesh const &disk_mesh = disk_meshes->lookup("Disk");
 	Mesh const &disk_outline_mesh = disk_meshes->lookup("DiskOutline");
 	for (int i = 0; i < 1; i++){
 		Scene::Transform *t = new Scene::Transform();
-		t->parent = tower;
+		t->parent = tower_transforms[1];
 		t->position = glm::vec3(0, 0.0f, 1.0f + i);
+		t->scale = glm::vec3(1.0f + (0.1f * i));
 		scene.drawables.emplace_back(t);
 		Scene::Drawable &drawable = scene.drawables.back();
 		drawable.pipeline = lit_color_texture_program_pipeline;
@@ -75,7 +72,7 @@ PlayMode::PlayMode() : scene(*tower_scene) {
 		drawableOutline.pipeline.start = disk_outline_mesh.start;
 		drawableOutline.pipeline.count = disk_outline_mesh.count;
 
-		disks.push_back(Disk(t, outline_t, BoxCollider(glm::vec3(1.0f, 1.0f, 0.5f), t), 0, 0));
+		tower1.push_back(Disk(t, outline_t, BoxCollider(glm::vec3(1.0f, 1.0f, 0.5f), t), 0, 1));
 	}
 
 	//get pointer to camera for convenience:

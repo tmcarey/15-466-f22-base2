@@ -30,7 +30,7 @@ struct PlayMode : Mode {
 	Scene scene;
 
 	//hexapod leg to wobble:
-	Scene::Transform *tower = nullptr;
+	Scene::Transform **tower_transforms[3];
 	Scene::Transform *pointer = nullptr;
 	/* Scene::Transform *upper_leg = nullptr; */
 	/* Scene::Transform *lower_leg = nullptr; */
@@ -38,7 +38,9 @@ struct PlayMode : Mode {
 	/* glm::quat upper_leg_base_rotation; */
 	/* glm::quat lower_leg_base_rotation; */
 	float wobble = 0.0f;
-	std::vector<Disk> disks;
+	std::list<Disk> tower1;
+	std::list<Disk> tower2;
+	std::list<Disk> tower3;
 	glm::vec2 mousePosition;
 	Disk *heldDisk = nullptr;
 	Disk *targetedDisk = nullptr;
